@@ -1,0 +1,178 @@
+define Start(p)
+{
+  # gVideoWidth <- 800
+  # gVideoHeight <- 600
+  gWin <- MakeWindow("black")
+  # lab <- EasyLabel("Welcome. Press any key to begin.", gVideoWidth/2, 200, gWin, 30)
+  # Draw()
+  # WaitForAnyKeyPress()
+
+  # MessageBox("These are the instructions for the test.", gWin)
+
+  done <- MakeButton("DONE", gVideoWidth - 100, 50, gWin, 100)
+
+  ## Set initial values to use if .par file does not exist.
+  parpairs <- [
+    ["stickerDimension", 50],
+    ["numStickers", 15],
+    ["gridSize", 10]]
+  gParams <- CreateParameters(parpairs, gParamFile)
+
+  ## draw stickers
+  gDim <- gParams.stickerDimension # sticker dimension
+  numStickers <- gParams.numStickers
+  padding <- 50
+  separator <- 10
+  x <- padding
+  y <- padding
+  stickers <- []
+  rows <- 3
+  cols <- Ceiling(numStickers/3)
+  layout <- LayoutGrid(gVideoWidth-2*padding-rows*(gDim+separator), gVideoWidth-padding, gVideoHeight-2*padding-cols*(gDim+separator), gVideoHeight-padding, cols, rows, 0)
+  loop (i, Sequence(1, numStickers, 1))
+  {
+    stickers <- Append(stickers, MakeImage("stickers/" + i + ".png"))
+    sticker <- Last(stickers)
+    xy <- Nth(layout, i)
+    Move(sticker, First(xy), Second(xy))
+    AddObject(sticker, gWin)
+  }
+  positions <- Repeat([0, 0], Length(stickers))
+
+  ## draw grid
+  n <- gParams.gridSize
+  gn <- n
+  thickness <- 0
+  gMinx <- padding
+  gMaxx <- 2 * padding + n * (gDim + thickness)
+  gMiny <- gMinx
+  gMaxy <- gMaxx
+  grid <- GetGrid(n)
+  layout <- LayoutGrid(gMinx, gMaxx, gMiny, gMaxy, n, n, 0)
+  
+  tmp <- Repeat(0, n * n)
+  squares <- []
+  loop(xy, layout)
+  {
+    squares <- Append(squares, Square(0, 0, gDim, MakeColor("white"), 0))
+    obj <- Last(squares)
+    AddObject(obj, gWin)
+    Move(obj, First(xy), Second(xy))
+  }
+
+
+  Draw()
+
+  ## handle mouse dragging
+  continue <- 1
+  while (continue)
+  {
+    pos <- WaitForDownClick()
+    x <- First(pos)
+    y <- Second(pos)
+    # exit
+    if (Inside(pos, done))
+    {
+      # save result file
+      header <- []
+      values <- []
+      ## save the position of each sticker
+      loop (i, Sequence(1, numStickers, 1))
+      {
+        xy <- Nth(positions, i)
+        header <- Append(header, i + "x")
+        header <- Append(header, i + "y")
+        values <- Append(values, First(xy))
+        values <- Append(values, Second(xy))
+      }
+      ## save distances between all stickers
+      loop (i, Sequence(1, numStickers, 1))
+      {
+        loop (j, Sequence(1, numStickers, 1))
+        {
+          if (i != j)
+          {
+            pt1 <- Nth(positions, i)
+            pt2 <- Nth(positions, j)
+            header <- Append(header, i + "-" + j)
+            values <- Append(values, Dist(pt1, pt2))
+          }
+        }
+      }
+      gFileOut <- GetNewDataFile(gSubNum, gWin, "SpAM", "csv", Join(header, ","))
+      FilePrint(gFileOut, Join(values, ","))
+      FileClose(gFileOut)
+      break
+    }
+    # move sticker
+    found <- Find([x,y], stickers)
+    if (found)
+    {
+      targ <- Nth(stickers, found)
+    } else {
+      continue
+    }
+    mousedown <- 1
+    while (mousedown and found)
+    {
+      state <- GetMouseState()
+      mousedown <- Third(state)
+
+      x <- First(state)
+      y <- Second(state)
+      closest <- Closest(state, layout)
+      SetElement(positions, found, [Third(closest), Fourth(closest)])
+      Move(targ, First(closest), Second(closest))
+      Draw()
+    }
+  }
+}
+
+define GetGrid(n)
+{
+  return RepeatList(Repeat(0, n), n)
+}
+
+define Find(pos, stickers)
+{
+  i <- 1
+  found <- 0
+  loop(item, stickers)
+  {
+    isInside <- Inside(pos, item)
+    if (isInside)
+    {
+      found <- i
+    }
+    i <- i + 1
+  }
+  return found
+}
+
+define Closest(xy, layout)
+{
+  ret <- xy
+  min <- gDim
+  i <- 1
+  loop(cell, layout)
+  {
+    dist <- Dist(cell, xy)
+    if (dist < min)
+    {
+      min <- dist
+      ret <- [First(cell), Second(cell), Ceiling(i / gn), Mod(i - 1, gn) + 1]
+    }
+    i <- i + 1
+  }
+  return ret
+}
+
+define Join(list, separator)
+{
+  str <- ""
+  loop(i, list)
+  {
+    str <- str + i + separator
+  }
+  return SubString(str, 1, StringLength(str) - 1)
+}
